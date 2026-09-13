@@ -117,31 +117,25 @@ const EYE_DARK = [15, 25, 15];
 const EYE_SHINE = [80, 200, 80];
 function drawTaperedStalk(rgba, width, height, base, tip, baseHalfW, tipHalfW) {
   const [bx, by] = base, [tx, ty] = tip;
-  const dx = ty - by, dy = tx - bx; // perpendicular direction (note the swapped dx/dy)
-  const len = Math.hypot(dx, dy) || 1;
+  const segDx = tx - bx, segDy = ty - by;
+  const segLen = Math.hypot(segDx, segDy) || 1;
+  const perpX = -segDy, perpY = segDx; // true perpendicular to the stalk direction
+
   const offset = (px, py, halfW) => [
-    [px + (halfW * dx) / len, py + (halfW * dy) / len],
-    [px - (halfW * dx) / len, py - (halfW * dy) / len],
+    [px + (halfW * perpX) / segLen, py + (halfW * perpY) / segLen],
+    [px - (halfW * perpX) / segLen, py - (halfW * perpY) / segLen],
   ];
 
   const [[bx1, by1], [bx2, by2]] = offset(bx, by, baseHalfW);
   const [[tx1, ty1], [tx2, ty2]] = offset(tx, ty, tipHalfW);
   fillPolygon(rgba, width, height, [[bx1, by1], [bx2, by2], [tx2, ty2], [tx1, ty1]], GREEN_DARK);
 
-  // Highlight: a straight capsule along base->tip (matches cv2.line's true
-  // segment direction), not the body polygon's swapped-dx/dy perpendicular.
-  // cv2.line's last argument is thickness (full width), so the half-width
-  // here is half of the value used for the body polygon's half-width.
-  const segDx = tx - bx, segDy = ty - by;
-  const segLen = Math.hypot(segDx, segDy) || 1;
-  const perpX = -segDy, perpY = segDx;
+  // Highlight: a thinner capsule along the same base->tip line. cv2.line's
+  // last argument is thickness (full width), so the half-width here is
+  // half of the value used for the body polygon's half-width.
   const lineHalfW = Math.max(1, Math.floor(baseHalfW / 2)) / 2;
-  const lineOffset = (px, py) => [
-    [px + (lineHalfW * perpX) / segLen, py + (lineHalfW * perpY) / segLen],
-    [px - (lineHalfW * perpX) / segLen, py - (lineHalfW * perpY) / segLen],
-  ];
-  const [[lbx1, lby1], [lbx2, lby2]] = lineOffset(bx, by);
-  const [[ltx1, lty1], [ltx2, lty2]] = lineOffset(tx, ty);
+  const [[lbx1, lby1], [lbx2, lby2]] = offset(bx, by, lineHalfW);
+  const [[ltx1, lty1], [ltx2, lty2]] = offset(tx, ty, lineHalfW);
   fillPolygon(rgba, width, height, [[lbx1, lby1], [lbx2, lby2], [ltx2, lty2], [ltx1, lty1]], GREEN_MID);
 }
 

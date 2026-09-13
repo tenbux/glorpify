@@ -92,3 +92,56 @@ test('drawGlorpFeatures returns a new buffer with visible eyes and leaves distan
   // A corner far from both eyes and the antennae must be untouched.
   assert.deepEqual(pixelAt(out, width, 1, 38), [255, 255, 255, 255]);
 });
+
+test('antenna stalk is symmetric around its centerline for a tilted (non-level) head', () => {
+  // Regression test: the previous version's perpendicular-offset math for
+  // the stalk body was a reflection, not a 90-degree rotation, so the
+  // "left" and "right" edges of the stalk polygon were offset by a
+  // direction that wasn't perpendicular to the stalk at all. That's only
+  // invisible when the stalk happens to be purely horizontal or vertical
+  // (exactly what the level-eyes test above exercises, which is why it
+  // never caught this), and produces a visibly skewed/pinched stalk at
+  // any other angle. This checks the stalk is actually painted on BOTH
+  // sides of its true (independently computed) centerline, not just one.
+  const width = 160, height = 160;
+  const rgba = blankBuffer(width, height);
+  rgba.fill(255);
+
+  const eyes = [[60, 100], [100, 80]]; // tilted, not level
+  const headTop = [80, 60];
+
+  const out = drawGlorpFeatures(rgba, width, height, eyes, headTop, 1.0);
+
+  function isBackground([r, g, b, a]) {
+    return a !== 255 || (r === 255 && g === 255 && b === 255);
+  }
+
+  // Base/tip of the left-hand (sign=-1) antenna, computed independently of
+  // the implementation from the same public helpers it's built from.
+  const { ux, uy, px, py } = computeAntennaOutwardVector(eyes[0], eyes[1], headTop);
+  const eyeDist = Math.hypot(eyes[1][0] - eyes[0][0], eyes[1][1] - eyes[0][1]);
+  const { stalkH, baseW, spread } = computeAntennaGeometry(eyeDist);
+  const bx = headTop[0] - spread * px, by = headTop[1] - spread * py;
+  const tx = bx - spread * px + stalkH * ux, ty = by - spread * py + stalkH * uy;
+
+  // True perpendicular to the base->tip line (independent re-derivation).
+  const segDx = tx - bx, segDy = ty - by;
+  const segLen = Math.hypot(segDx, segDy);
+  const perpX = -segDy / segLen, perpY = segDx / segLen;
+
+  // Sample at t=0.3 along the centerline, clear of the base (where both
+  // antennae originate close together near headTop and can overlap).
+  const t = 0.3;
+  const cx0 = bx + t * (tx - bx), cy0 = by + t * (ty - by);
+  const localHalfW = baseW + t * (2 - baseW); // linear taper: baseHalfW -> tipHalfW(=2)
+
+  const side1 = pixelAt(out, width, Math.round(cx0 + perpX * localHalfW * 0.6), Math.round(cy0 + perpY * localHalfW * 0.6));
+  const side2 = pixelAt(out, width, Math.round(cx0 - perpX * localHalfW * 0.6), Math.round(cy0 - perpY * localHalfW * 0.6));
+  const beyond1 = pixelAt(out, width, Math.round(cx0 + perpX * localHalfW * 2.5), Math.round(cy0 + perpY * localHalfW * 2.5));
+  const beyond2 = pixelAt(out, width, Math.round(cx0 - perpX * localHalfW * 2.5), Math.round(cy0 - perpY * localHalfW * 2.5));
+
+  assert.ok(!isBackground(side1), `expected stalk color just inside one true edge, got ${side1}`);
+  assert.ok(!isBackground(side2), `expected stalk color just inside the other true edge, got ${side2}`);
+  assert.ok(isBackground(beyond1), `expected background well outside one true edge, got ${beyond1}`);
+  assert.ok(isBackground(beyond2), `expected background well outside the other true edge, got ${beyond2}`);
+});
