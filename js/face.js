@@ -9,14 +9,31 @@
  * sample point by a constant offset shifts the centroid by that same
  * offset, so the two approaches are algebraically equivalent.
  */
+// Keep default marker positions at least this far from every edge (as a
+// fraction of the shorter image dimension), so their draggable hit area
+// never starts clipped by the canvas edge, which is especially awkward to
+// grab with a touch on mobile.
+const EDGE_MARGIN_FRACTION = 0.08;
+
+function clampToEdgeMargin([x, y], width, height) {
+  const margin = Math.round(Math.min(width, height) * EDGE_MARGIN_FRACTION);
+  return [
+    Math.max(margin, Math.min(width - 1 - margin, x)),
+    Math.max(margin, Math.min(height - 1 - margin, y)),
+  ];
+}
+
 export function detectFacePoints(width, height, mask, bbox) {
   if (bbox == null) {
     const cx = Math.floor(width / 2);
     const cy = Math.floor(height / 3);
     const spread = Math.floor(width / 8);
     return {
-      eyes: [[cx - spread, cy], [cx + spread, cy]],
-      headTop: [cx, Math.max(0, cy - spread)],
+      eyes: [
+        clampToEdgeMargin([cx - spread, cy], width, height),
+        clampToEdgeMargin([cx + spread, cy], width, height),
+      ],
+      headTop: clampToEdgeMargin([cx, cy - spread], width, height),
     };
   }
 
@@ -58,7 +75,10 @@ export function detectFacePoints(width, height, mask, bbox) {
   const spread = Math.floor(catW * (aspect > 0.6 ? 0.20 : 0.15));
 
   return {
-    eyes: [[cx - spread, cy], [cx + spread, cy]],
-    headTop: [cx, Math.max(0, cy - spread)],
+    eyes: [
+      clampToEdgeMargin([cx - spread, cy], width, height),
+      clampToEdgeMargin([cx + spread, cy], width, height),
+    ],
+    headTop: clampToEdgeMargin([cx, cy - spread], width, height),
   };
 }

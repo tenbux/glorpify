@@ -56,3 +56,17 @@ test('falls back to bbox-center defaults when the head region of the mask is emp
 
   assert.deepEqual(result, withoutMask);
 });
+
+test('clamps default points away from the image edge for a cat near a corner', () => {
+  const width = 800, height = 600; // margin = round(min(800,600) * 0.08) = 48
+  const bbox = [0, 0, 100, 100]; // small cat right at the top-left corner
+  const result = detectFacePoints(width, height, null, bbox);
+
+  // Raw (unclamped) math would give eyes=[[30,25],[70,25]], headTop=[50,5],
+  // all within 48px of the top edge; every y (and eyes[0]'s x) must be
+  // pulled in to the 48px margin instead of sitting flush against the edge.
+  assert.deepEqual(result, {
+    eyes: [[48, 48], [70, 48]],
+    headTop: [50, 48],
+  });
+});

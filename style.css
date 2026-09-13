@@ -160,13 +160,15 @@ header h1 { font-size: 2.4rem; color: #39d353; text-shadow: 0 0 12px #39d35366; 
 .marker-dot {
   width: 22px; height: 22px;
   border-radius: 50%;
+  background: #ff3ea5;
   border: 2px solid #fff;
-  box-shadow: 0 0 6px #000a;
+  /* Black ring + white border together stay visible against the recolored
+     (always green) cat, the dark page background, and light photo content
+     alike, rather than just a shadow that a similar-brightness background
+     can wash out. */
+  box-shadow: 0 0 0 2px #000, 0 1px 6px #000c;
   pointer-events: none;
 }
-.marker-eye-l .marker-dot { background: #c9d1d9; }
-.marker-eye-r .marker-dot { background: #c9d1d9; }
-.marker-head  .marker-dot { background: #39d353; }
 .marker-label {
   position: absolute;
   top: -4px;

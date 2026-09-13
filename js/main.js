@@ -363,14 +363,34 @@ function clientToNatural(clientX, clientY) {
 
 let brushStroke = null;
 
+/**
+ * Cheap live feedback while dragging: a flat semi-transparent dab painted
+ * directly on the canvas. glorpGreen's full-image feathering pass costs
+ * ~85-95ms on a large photo, far too slow to call on every drag move, so
+ * the authoritative recompute (applyBrushStroke + glorpGreen) only runs
+ * once, on brush end.
+ */
+function paintPreviewDab([nx, ny]) {
+  const { mode, radius } = currentBrushSettings();
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = mode === 'add' ? 'rgba(57,211,83,0.6)' : 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(nx, ny, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function onBrushStart(clientX, clientY) {
   if (!state.brushMode) return;
-  brushStroke = [clientToNatural(clientX, clientY)];
+  const pt = clientToNatural(clientX, clientY);
+  brushStroke = [pt];
+  paintPreviewDab(pt);
 }
 
 function onBrushMove(clientX, clientY) {
   if (!state.brushMode || !brushStroke) return;
-  brushStroke.push(clientToNatural(clientX, clientY));
+  const pt = clientToNatural(clientX, clientY);
+  brushStroke.push(pt);
+  paintPreviewDab(pt);
 }
 
 function onBrushEnd() {
