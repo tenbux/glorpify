@@ -244,6 +244,8 @@ button:hover { background: #30363d; border-color: #8b949e; }
 #canvas-wrapper.brush-mode #preview-canvas { cursor: crosshair; touch-action: none; }
 #canvas-wrapper.brush-mode .marker { pointer-events: none; opacity: 0.35; }
 
+#canvas-wrapper.previewing-eye-size .marker { display: none; }
+
 /* Footer */
 #page-footer {
   margin-top: 1rem;

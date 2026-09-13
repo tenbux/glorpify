@@ -309,14 +309,17 @@ function renderFeatures(eyeScale) {
 // eyes+antennae at the in-progress size directly onto the editor canvas,
 // using the current marker positions. Reverts to the plain recolored image
 // on release, so a marker dragged afterward never leaves a stale preview
-// showing eyes at their old spot.
+// showing eyes at their old spot. The markers themselves are hidden while
+// previewing so they don't sit on top of (and hide) the size being shown.
 eyeScaleInput.addEventListener('input', () => {
   if (!state.recoloredRgba) return;
+  canvasWrap.classList.add('previewing-eye-size');
   const eyeScale = parseFloat(eyeScaleInput.value);
   const previewRgba = renderFeatures(eyeScale);
   canvas.getContext('2d').putImageData(new ImageData(previewRgba, state.width, state.height), 0, 0);
 });
 eyeScaleInput.addEventListener('change', () => {
+  canvasWrap.classList.remove('previewing-eye-size');
   if (state.recoloredRgba) drawRecoloredToCanvas();
 });
 
