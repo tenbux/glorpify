@@ -1,0 +1,25 @@
+{
+  "photo": "cat-iran.jpg",
+  "cappedWidth": 960,
+  "cappedHeight": 1280,
+  "letterbox": {
+    "r": 0.5,
+    "top": 0,
+    "left": 80,
+    "bottom": 0,
+    "right": 80,
+    "unpadWidth": 480,
+    "unpadHeight": 640
+  },
+  "detection": {
+    "confidence": 0.9117776155471802,
+    "classId": 15
+  },
+  "boxOriginal": [
+    175.2811279296875,
+    315.3975830078125,
+    856.9251708984375,
+    1014.8712158203125
+  ],
+  "expectedMaskNonzeroCount": 250795
+}

@@ -1,0 +1,25 @@
+{
+  "photo": "cat-sakurajima.jpg",
+  "cappedWidth": 960,
+  "cappedHeight": 1280,
+  "letterbox": {
+    "r": 0.5,
+    "top": 0,
+    "left": 80,
+    "bottom": 0,
+    "right": 80,
+    "unpadWidth": 480,
+    "unpadHeight": 640
+  },
+  "detection": {
+    "confidence": 0.9115130305290222,
+    "classId": 15
+  },
+  "boxOriginal": [
+    305.19464111328125,
+    254.2704620361328,
+    631.1343383789062,
+    750.5380249023438
+  ],
+  "expectedMaskNonzeroCount": 106371
+}

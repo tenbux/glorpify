@@ -1,0 +1,19 @@
+{
+  "name": "glorpify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.29.0"
+  },
+  "devDependencies": {
+    "onnxruntime-node": "1.29.0"
+  },
+  "allowScripts": {
+    "onnxruntime-node@1.29.0": true,
+    "protobufjs@7.6.6": true
+  }
+}

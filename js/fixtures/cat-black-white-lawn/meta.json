@@ -1,0 +1,25 @@
+{
+  "photo": "cat-black-white-lawn.jpg",
+  "cappedWidth": 1280,
+  "cappedHeight": 860,
+  "letterbox": {
+    "r": 0.5,
+    "top": 105,
+    "left": 0,
+    "bottom": 105,
+    "right": 0,
+    "unpadWidth": 640,
+    "unpadHeight": 430
+  },
+  "detection": {
+    "confidence": 0.9477993249893188,
+    "classId": 15
+  },
+  "boxOriginal": [
+    375.8143005371094,
+    207.69732666015625,
+    821.4066162109375,
+    590.2973022460938
+  ],
+  "expectedMaskNonzeroCount": 122975
+}

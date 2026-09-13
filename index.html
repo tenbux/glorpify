@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glorpify 🐱👽</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <noscript>
+    <p id="no-js-banner">Glorpify needs JavaScript enabled to run (it does all its work in your browser, with no server). Please enable JavaScript and reload.</p>
+  </noscript>
+
+  <div id="browser-unsupported" hidden>
+    This browser doesn't support the features Glorpify needs (JavaScript modules and WebAssembly). Please update your browser.
+  </div>
+  <script nomodule>document.getElementById('browser-unsupported').hidden = false;</script>
+
+  <header>
+    <button id="instructions-btn" aria-label="How to use Glorpify" title="How to use Glorpify">?</button>
+    <h1>Glorpify 👽🐱</h1>
+    <p class="subtitle">Turn any cat photo into a Glorp meme</p>
+  </header>
+
+  <dialog id="instructions-dialog">
+    <h2>How to use Glorpify</h2>
+    <ol>
+      <li>Upload a cat photo (drag &amp; drop or click to browse).</li>
+      <li>Drag the three markers onto the left eye, right eye, and top of the head.</li>
+      <li>Optionally use "Fix Green" to paint over spots the auto-detection missed.</li>
+      <li>Click "Glorp it!" to render the final image.</li>
+      <li>Download your Glorp.</li>
+    </ol>
+    <button id="instructions-close-btn">Close</button>
+  </dialog>
+
+  <!-- Model loading state (shown once on first visit, or if triggered before the model is ready) -->
+  <div id="model-loading" hidden>
+    <p><span id="model-loading-label">Loading Glorp brain...</span> <span id="model-progress-text">0%</span></p>
+    <progress id="model-progress-bar" max="100" value="0"></progress>
+    <button id="model-retry-btn" hidden>Retry</button>
+  </div>
+
+  <!-- Upload section -->
+  <section id="upload-section">
+    <label class="upload-label" for="file-input">
+      <div class="upload-box" id="drop-zone">
+        <span class="upload-icon">🐱</span>
+        <span>Drop a cat photo here<br/>or <u>click to browse</u></span>
+      </div>
+      <input type="file" id="file-input" accept="image/*" hidden />
+    </label>
+  </section>
+
+  <!-- Spinner (per-image inference, not model loading) -->
+  <div id="spinner" hidden>
+    <div class="spin-ring"></div>
+    <p>Glorping...</p>
+  </div>
+
+  <!-- Error banner -->
+  <div id="error-banner" class="error" hidden></div>
+
+  <!-- Editor section (shown after successful segmentation) -->
+  <section id="editor-section" hidden>
+    <p class="hint" id="hint-text"></p>
+    <div id="canvas-wrapper">
+      <canvas id="preview-canvas"></canvas>
+      <!-- Draggable markers injected by JS -->
+    </div>
+    <div class="controls">
+      <label class="eye-scale-control">
+        Eye size
+        <input type="range" id="eye-scale" min="0.5" max="2.0" step="0.05" value="1.0" />
+      </label>
+      <button id="fix-green-btn">Fix Green 🖌️</button>
+      <button id="glorp-btn">Glorp it! 👽</button>
+      <button id="reset-btn">Upload another</button>
+    </div>
+
+    <div id="brush-panel" hidden>
+      <label><input type="radio" name="brush-mode" value="add" checked /> Add green</label>
+      <label><input type="radio" name="brush-mode" value="erase" /> Erase</label>
+      <label>
+        Brush size
+        <input type="range" id="brush-radius" min="5" max="50" step="1" value="15" />
+      </label>
+      <button id="brush-done-btn">Done</button>
+    </div>
+  </section>
+
+  <!-- Result section -->
+  <section id="result-section" hidden>
+    <img id="result-img" alt="Glorped cat" />
+    <div class="controls">
+      <a id="download-link" download="glorp.png">
+        <button>Download Glorp 💾</button>
+      </a>
+      <button id="redo-btn">Adjust markers</button>
+      <button id="new-btn">Upload another</button>
+    </div>
+  </section>
+
+  <footer id="page-footer">
+    <p class="privacy-note">
+      Your photo is processed entirely on this device: it is never uploaded
+      or transmitted anywhere. Questions? <a href="mailto:glorpify@tenbux.dev">glorpify@tenbux.dev</a>
+    </p>
+    <div id="donate-container">
+      <script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="tenbux" data-color="#39d353" data-emoji="" data-font="Poppins" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#FFDD00"></script>
+    </div>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
