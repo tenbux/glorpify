@@ -17,3 +17,7 @@ js/fixtures/*/output1.f32
 js/fixtures/*/mask.bin
 .DS_Store
 .worktrees/
+wrangler.toml
+.wrangler/
+CLAUDE.md
+.claude/launch.json
