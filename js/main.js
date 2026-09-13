@@ -11,7 +11,7 @@ import { glorpGreen } from './recolor.js';
 import { drawGlorpFeatures } from './features.js';
 import * as ort from './vendor/ort.all.bundle.min.mjs';
 
-const MODEL_URL = './model/yolov8s-seg.onnx';
+const MODEL_URL = 'https://glorpify-assets.tenbux.dev/yolov8s-seg.v1.onnx';
 
 const $ = (id) => document.getElementById(id);
 
