@@ -114,7 +114,11 @@ export function fillEllipse(rgba, width, height, cx, cy, axisX, axisY, angleDeg,
 const GREEN_DARK = [0, 120, 0];
 const GREEN_MID = [20, 180, 20];
 const EYE_DARK = [15, 25, 15];
-const EYE_SHINE = [80, 200, 80];
+const EYE_MID = [47, 90, 44];
+const EYE_RIM = [5, 13, 5];
+const RIM_LIGHT = [160, 235, 150];
+const EDGE_DARK = [5, 15, 5];
+const GLOSS_WHITE = [235, 255, 230];
 function drawTaperedStalk(rgba, width, height, base, tip, baseHalfW, tipHalfW) {
   const [bx, by] = base, [tx, ty] = tip;
   const segDx = tx - bx, segDy = ty - by;
@@ -153,12 +157,109 @@ function drawAntennae(rgba, width, height, leftEye, rightEye, headTop, eyeDist) 
   }
 }
 
+function clamp01(t) {
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}
+
+function lerpColor(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+// Per-pixel equivalent of a `screen` blend against a light color: adds
+// light proportional to `weight` without ever overshooting the light's own
+// value, so it brightens the surface instead of pasting a flat color over
+// it. `weight` is expected in [0, 1].
+function addLight(base, weight, light) {
+  return [
+    base[0] + weight * (light[0] - base[0]),
+    base[1] + weight * (light[1] - base[1]),
+    base[2] + weight * (light[2] - base[2]),
+  ];
+}
+
+// Weight (0..1, via Gaussian falloff) of an elongated, rotated highlight at
+// local point (rx, ry) -- the per-pixel stand-in for a blurred, rotated
+// radial-gradient ellipse.
+function highlightWeight(rx, ry, cx, cy, radX, radY, rotDeg) {
+  const rotR = (rotDeg * Math.PI) / 180;
+  const cos = Math.cos(rotR), sin = Math.sin(rotR);
+  const dx = rx - cx, dy = ry - cy;
+  const lx = dx * cos + dy * sin;
+  const ly = -dx * sin + dy * cos;
+  const nx = lx / radX, ny = ly / radY;
+  return Math.exp(-3 * (nx * nx + ny * ny));
+}
+
+/**
+ * Glossy eye shading at local point (rx, ry): the pixel offset from the eye
+ * center, already inverse-rotated into the ellipse's own frame (see
+ * fillEllipseShaded). A sphere-shaded body, a primary catch-light (soft
+ * halo + crisp core), a secondary ambient bounce anchored to the primary,
+ * a wet-look rim light along the lower edge, and a darkened boundary band
+ * so the gloss doesn't wash out the eye's silhouette.
+ */
+function alienEyeColor(rx, ry, axisX, axisY, left) {
+  const sign = left ? 1 : -1;
+
+  const gx = sign * axisX * 0.3, gy = -axisY * 0.5;
+  const d = Math.hypot(rx - gx, ry - gy) / (axisX * 1.15);
+  let color = d <= 0.55
+    ? lerpColor(EYE_MID, EYE_DARK, d / 0.55)
+    : lerpColor(EYE_DARK, EYE_RIM, clamp01((d - 0.55) / 0.45));
+
+  const hx = sign * axisX * 0.20, hy = -axisY * 0.30;
+  const hr = Math.max(axisX * 0.15, 2);
+  const rot = -sign * 25;
+  color = addLight(color, highlightWeight(rx, ry, hx, hy, hr * 1.2, hr * 0.75, rot) * 0.55, GLOSS_WHITE);
+  color = addLight(color, highlightWeight(rx, ry, hx, hy, hr * 0.7, hr * 0.55, rot) * 0.5, GLOSS_WHITE);
+
+  // Secondary highlight is anchored to the primary's position rather than
+  // placed independently, so the two always read as one light source.
+  const sx = hx - sign * axisX * 0.5, sy = hy + axisY * 0.6;
+  color = addLight(color, highlightWeight(rx, ry, sx, sy, axisX * 0.24, axisY * 0.18, -sign * 20) * 0.25, GLOSS_WHITE);
+
+  const rimT = clamp01((ry / axisY - 0.55) / 0.45);
+  color = addLight(color, rimT * 0.35, RIM_LIGHT);
+
+  const radiusN = Math.hypot(rx / axisX, ry / axisY);
+  const edgeT = clamp01((radiusN - 0.92) / 0.08) * 0.85;
+  color = lerpColor(color, EDGE_DARK, edgeT);
+
+  return color;
+}
+
+/**
+ * Filled ellipse with a per-pixel color callback instead of a flat color,
+ * for shaded fills. colorFn receives (rx, ry): the pixel offset from
+ * (cx, cy) after inverse-rotating into the ellipse's own frame, same
+ * convention fillEllipse uses internally. Mutates `rgba` in place.
+ */
+function fillEllipseShaded(rgba, width, height, cx, cy, axisX, axisY, angleDeg, colorFn) {
+  const angleR = (-angleDeg * Math.PI) / 180;
+  const cos = Math.cos(angleR), sin = Math.sin(angleR);
+  const maxAxis = Math.max(axisX, axisY);
+  const x0 = Math.max(0, Math.floor(cx - maxAxis));
+  const x1 = Math.min(width - 1, Math.ceil(cx + maxAxis));
+  const y0 = Math.max(0, Math.floor(cy - maxAxis));
+  const y1 = Math.min(height - 1, Math.ceil(cy + maxAxis));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx, dy = y - cy;
+      const rx = dx * cos - dy * sin;
+      const ry = dx * sin + dy * cos;
+      if ((rx * rx) / (axisX * axisX) + (ry * ry) / (axisY * axisY) <= 1) {
+        setPixel(rgba, width, height, x, y, colorFn(rx, ry));
+      }
+    }
+  }
+}
+
 function drawAlienEye(rgba, width, height, center, eyeDist, left, faceAngleDeg, eyeScale) {
   const [cx, cy] = center;
   const { axisX, axisY } = computeEyeAxes(eyeDist, eyeScale);
-  fillEllipse(rgba, width, height, cx, cy, axisX, axisY, faceAngleDeg, EYE_DARK);
-  const { hx, hy, hr } = computeEyeHighlightOffset(axisX, axisY, faceAngleDeg, left);
-  fillCircle(rgba, width, height, cx + hx, cy + hy, hr, EYE_SHINE);
+  fillEllipseShaded(rgba, width, height, cx, cy, axisX, axisY, faceAngleDeg, (rx, ry) =>
+    alienEyeColor(rx, ry, axisX, axisY, left)
+  );
 }
 
 /**

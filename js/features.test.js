@@ -86,9 +86,10 @@ test('drawGlorpFeatures returns a new buffer with visible eyes and leaves distan
   const out = drawGlorpFeatures(rgba, width, height, eyes, headTop, 1.0);
 
   assert.notEqual(out, rgba, 'must return a new array');
-  // Eye centers should be the dark eye color (EYE_DARK = [15, 25, 15]).
-  assert.deepEqual(pixelAt(out, width, 20, 20), [15, 25, 15, 255]);
-  assert.deepEqual(pixelAt(out, width, 40, 20), [15, 25, 15, 255]);
+  // Eye centers sit on the glossy shading gradient (not flat EYE_DARK
+  // anymore), but both eyes are mirror images so their centers match.
+  assert.deepEqual(pixelAt(out, width, 20, 20), [24, 44, 24, 255]);
+  assert.deepEqual(pixelAt(out, width, 40, 20), [24, 44, 24, 255]);
   // A corner far from both eyes and the antennae must be untouched.
   assert.deepEqual(pixelAt(out, width, 1, 38), [255, 255, 255, 255]);
 });
