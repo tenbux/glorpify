@@ -25,6 +25,7 @@ body {
 
 header { text-align: center; position: relative; width: 100%; max-width: 800px; }
 header h1 { font-size: 2.4rem; color: #39d353; text-shadow: 0 0 12px #39d35366; }
+.logo-icon { vertical-align: middle; margin-left: 0.2rem; border-radius: 8px; }
 .subtitle { color: #8b949e; margin-top: 0.3rem; }
 
 #instructions-btn {
