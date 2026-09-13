@@ -5,20 +5,20 @@
  * never matters here.
  */
 
-const GREEN_HUE_DEG = 120; // OpenCV hue 60 (0-179 scale) equals 120 degrees (0-360 scale)
-const SAT_SCALE = 2.5;
-const SAT_ADD = 110;
-const V_LIFT_LOW = 60;
-const V_LIFT_HIGH = 200;
-const V_LIFT_AMOUNT = 20;
+export const GREEN_HUE_DEG = 120; // OpenCV hue 60 (0-179 scale) equals 120 degrees (0-360 scale)
+export const SAT_SCALE = 2.5;
+export const SAT_ADD = 110;
+export const V_LIFT_LOW = 60;
+export const V_LIFT_HIGH = 200;
+export const V_LIFT_AMOUNT = 20;
 const FEATHER_RADIUS = 5;
 
-function clamp255(x) {
+export function clamp255(x) {
   return x < 0 ? 0 : x > 255 ? 255 : x;
 }
 
 /** Saturation and Value from an RGB triple, matching cv2.cvtColor(BGR2HSV)'s S/V formulas. */
-function rgbToSV(r, g, b) {
+export function rgbToSV(r, g, b) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const v = max;
@@ -27,7 +27,7 @@ function rgbToSV(r, g, b) {
 }
 
 /** HSV (h in degrees 0-360, s/v in 0-255) to RGB (0-255 each). */
-function hsvToRgb(h, s, v) {
+export function hsvToRgb(h, s, v) {
   const s1 = s / 255;
   const v1 = v / 255;
   const c = v1 * s1;

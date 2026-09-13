@@ -293,17 +293,37 @@ function makeDraggable(el, key, signal) {
 
 let lastResultUrl = null;
 
-glorpBtn.addEventListener('click', () => {
-  setError(null);
-  const eyeScale = parseFloat(eyeScaleInput.value);
-  const finalRgba = drawGlorpFeatures(
+function renderFeatures(eyeScale) {
+  return drawGlorpFeatures(
     state.recoloredRgba,
     state.width,
     state.height,
     [state.markers.eyeL, state.markers.eyeR],
     state.markers.head,
     eyeScale,
+    state.mask,
   );
+}
+
+// Live preview while dragging the eye-size slider: paint the actual
+// eyes+antennae at the in-progress size directly onto the editor canvas,
+// using the current marker positions. Reverts to the plain recolored image
+// on release, so a marker dragged afterward never leaves a stale preview
+// showing eyes at their old spot.
+eyeScaleInput.addEventListener('input', () => {
+  if (!state.recoloredRgba) return;
+  const eyeScale = parseFloat(eyeScaleInput.value);
+  const previewRgba = renderFeatures(eyeScale);
+  canvas.getContext('2d').putImageData(new ImageData(previewRgba, state.width, state.height), 0, 0);
+});
+eyeScaleInput.addEventListener('change', () => {
+  if (state.recoloredRgba) drawRecoloredToCanvas();
+});
+
+glorpBtn.addEventListener('click', () => {
+  setError(null);
+  const eyeScale = parseFloat(eyeScaleInput.value);
+  const finalRgba = renderFeatures(eyeScale);
 
   const renderCanvas = document.createElement('canvas');
   renderCanvas.width = state.width;
@@ -378,6 +398,18 @@ function paintPreviewDab([nx, ny]) {
   ctx.arc(nx, ny, radius, 0, Math.PI * 2);
   ctx.fill();
 }
+
+// Live preview while dragging the brush-size slider: same dab the brush
+// itself paints while stroking, centered on the canvas so its size is
+// visible without needing a stroke in progress. Reverts on release.
+brushRadiusInput.addEventListener('input', () => {
+  if (!state.recoloredRgba) return;
+  drawRecoloredToCanvas();
+  paintPreviewDab([Math.floor(state.width / 2), Math.floor(state.height / 2)]);
+});
+brushRadiusInput.addEventListener('change', () => {
+  if (state.recoloredRgba) drawRecoloredToCanvas();
+});
 
 function onBrushStart(clientX, clientY) {
   if (!state.brushMode) return;

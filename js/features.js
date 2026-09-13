@@ -4,6 +4,8 @@
  * distance so it looks right at any resolution.
  */
 
+import { rgbToSV, hsvToRgb, GREEN_HUE_DEG, SAT_SCALE, SAT_ADD, V_LIFT_LOW, V_LIFT_HIGH, V_LIFT_AMOUNT, clamp255 } from './recolor.js';
+
 export function computeAntennaOutwardVector(leftEye, rightEye, headTop) {
   const [lx, ly] = leftEye, [rx, ry] = rightEye, [cx, cy] = headTop;
   const ex = rx - lx, ey = ry - ly;
@@ -111,15 +113,57 @@ export function fillEllipse(rgba, width, height, cx, cy, axisX, axisY, angleDeg,
   }
 }
 
-const GREEN_DARK = [0, 120, 0];
-const GREEN_MID = [20, 180, 20];
+const GREEN_DARK = [0, 120, 0]; // fallback antenna tone when sampling is out of bounds
 const EYE_DARK = [15, 25, 15];
 const EYE_MID = [47, 90, 44];
 const EYE_RIM = [5, 13, 5];
 const RIM_LIGHT = [160, 235, 150];
 const EDGE_DARK = [5, 15, 5];
 const GLOSS_WHITE = [235, 255, 230];
-function drawTaperedStalk(rgba, width, height, base, tip, baseHalfW, tipHalfW) {
+// Average color in a disc of `srcRgba`, for tinting a feature from the
+// (already recolored) cat pixels underneath it. The antenna base sits at a
+// fixed geometric offset from the headTop marker, which can land just past
+// the actual mask boundary (thin ear-tip fur, a slightly-off marker) and
+// pick up unrecolored background instead of fur -- so when `mask` is given,
+// only pixels the mask actually calls "cat" are averaged, and the search
+// radius doubles (up to 8x) until it finds some, rather than quietly
+// averaging in whatever background happens to be nearby.
+function sampleAverageColor(srcRgba, mask, width, height, cx, cy, radius, fallback) {
+  const maxRadius = radius * 8;
+  for (let r = radius; r <= maxRadius; r *= 2) {
+    const x0 = Math.max(0, Math.floor(cx - r));
+    const x1 = Math.min(width - 1, Math.ceil(cx + r));
+    const y0 = Math.max(0, Math.floor(cy - r));
+    const y1 = Math.min(height - 1, Math.ceil(cy + r));
+    const r2 = r * r;
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy <= r2) {
+          const i = y * width + x;
+          if (!mask || mask[i] > 127) {
+            const o = i * 4;
+            rSum += srcRgba[o]; gSum += srcRgba[o + 1]; bSum += srcRgba[o + 2];
+            count++;
+          }
+        }
+      }
+    }
+    if (count > 0) return [rSum / count, gSum / count, bSum / count];
+  }
+  return fallback;
+}
+
+function lightenTowardWhite(color, t) {
+  return [
+    color[0] + (255 - color[0]) * t,
+    color[1] + (255 - color[1]) * t,
+    color[2] + (255 - color[2]) * t,
+  ];
+}
+
+function drawTaperedStalk(rgba, width, height, base, tip, baseHalfW, tipHalfW, darkColor, midColor) {
   const [bx, by] = base, [tx, ty] = tip;
   const segDx = tx - bx, segDy = ty - by;
   const segLen = Math.hypot(segDx, segDy) || 1;
@@ -130,20 +174,25 @@ function drawTaperedStalk(rgba, width, height, base, tip, baseHalfW, tipHalfW) {
     [px - (halfW * perpX) / segLen, py - (halfW * perpY) / segLen],
   ];
 
+  // Round the base: a circle at the base point, then the tapered polygon
+  // drawn over its tip-facing half, leaving the far half as a round cap so
+  // the stalk reads as a cylinder rather than a flat-cut sliver.
+  fillCircle(rgba, width, height, bx, by, baseHalfW, darkColor);
   const [[bx1, by1], [bx2, by2]] = offset(bx, by, baseHalfW);
   const [[tx1, ty1], [tx2, ty2]] = offset(tx, ty, tipHalfW);
-  fillPolygon(rgba, width, height, [[bx1, by1], [bx2, by2], [tx2, ty2], [tx1, ty1]], GREEN_DARK);
+  fillPolygon(rgba, width, height, [[bx1, by1], [bx2, by2], [tx2, ty2], [tx1, ty1]], darkColor);
 
-  // Highlight: a thinner capsule along the same base->tip line. cv2.line's
-  // last argument is thickness (full width), so the half-width here is
-  // half of the value used for the body polygon's half-width.
+  // Highlight: a thinner capsule along the same base->tip line, rounded at
+  // the base the same way. cv2.line's last argument is thickness (full
+  // width), so the half-width here is half of the body polygon's.
   const lineHalfW = Math.max(1, Math.floor(baseHalfW / 2)) / 2;
+  fillCircle(rgba, width, height, bx, by, lineHalfW, midColor);
   const [[lbx1, lby1], [lbx2, lby2]] = offset(bx, by, lineHalfW);
   const [[ltx1, lty1], [ltx2, lty2]] = offset(tx, ty, lineHalfW);
-  fillPolygon(rgba, width, height, [[lbx1, lby1], [lbx2, lby2], [ltx2, lty2], [ltx1, lty1]], GREEN_MID);
+  fillPolygon(rgba, width, height, [[lbx1, lby1], [lbx2, lby2], [ltx2, lty2], [ltx1, lty1]], midColor);
 }
 
-function drawAntennae(rgba, width, height, leftEye, rightEye, headTop, eyeDist) {
+function drawAntennae(rgba, srcRgba, mask, width, height, leftEye, rightEye, headTop, eyeDist) {
   const { ux, uy, px, py } = computeAntennaOutwardVector(leftEye, rightEye, headTop);
   const { stalkH, baseW, spread, bulbR } = computeAntennaGeometry(eyeDist);
   const [cx, cy] = headTop;
@@ -151,9 +200,28 @@ function drawAntennae(rgba, width, height, leftEye, rightEye, headTop, eyeDist) 
   for (const sign of [-1, 1]) {
     const bx = cx + sign * spread * px, by = cy + sign * spread * py;
     const tx = bx + sign * spread * px + stalkH * ux, ty = by + sign * spread * py + stalkH * uy;
-    drawTaperedStalk(rgba, width, height, [bx, by], [tx, ty], baseW, 2);
-    fillCircle(rgba, width, height, tx, ty, bulbR, GREEN_DARK);
-    fillCircle(rgba, width, height, tx, ty, Math.max(bulbR - 2, 2), GREEN_MID);
+
+    // Tint the whole antenna from the cat's own color right where it
+    // attaches, so a darker/lighter cat produces a correspondingly
+    // darker/lighter antenna and the base blends in. The sample point can
+    // land just past the mask edge (thin ear-tip fur, feathered mask
+    // boundary) and pick up unrecolored background hue, so force hue back
+    // to the same green the rest of the body was recolored to -- only
+    // brightness (and, boosted the same way, saturation) come from the
+    // sample, matching glorpGreen's own hue-forcing transform exactly.
+    const sampled = sampleAverageColor(srcRgba, mask, width, height, bx, by, Math.max(baseW, 4), null);
+    let dark = GREEN_DARK;
+    if (sampled) {
+      const [s, v] = rgbToSV(sampled[0], sampled[1], sampled[2]);
+      const sBoosted = clamp255(s * SAT_SCALE + SAT_ADD);
+      const vLifted = v >= V_LIFT_LOW && v <= V_LIFT_HIGH ? clamp255(v + V_LIFT_AMOUNT) : v;
+      dark = hsvToRgb(GREEN_HUE_DEG, sBoosted, vLifted);
+    }
+    const mid = lightenTowardWhite(dark, 0.35);
+
+    drawTaperedStalk(rgba, width, height, [bx, by], [tx, ty], baseW, 2, dark, mid);
+    fillCircle(rgba, width, height, tx, ty, bulbR, dark);
+    fillCircle(rgba, width, height, tx, ty, Math.max(bulbR - 2, 2), mid);
   }
 }
 
@@ -265,14 +333,16 @@ function drawAlienEye(rgba, width, height, center, eyeDist, left, faceAngleDeg, 
 /**
  * Draw Glorp antennae and alien eyes onto an RGBA buffer. Returns a NEW
  * Uint8ClampedArray; does not mutate rgba. eyes is [[x,y],[x,y]] left/right;
- * eyeScale uniformly scales both eyes (1.0 = default size).
+ * eyeScale uniformly scales both eyes (1.0 = default size). `mask` (the same
+ * cat mask glorpGreen used, if available) keeps the antenna's color sample
+ * restricted to actual cat pixels instead of whatever is nearby.
  */
-export function drawGlorpFeatures(rgba, width, height, eyes, headTop, eyeScale = 1.0) {
+export function drawGlorpFeatures(rgba, width, height, eyes, headTop, eyeScale = 1.0, mask = null) {
   const out = new Uint8ClampedArray(rgba);
   const [left, right] = eyes;
   const eyeDist = Math.max(Math.abs(right[0] - left[0]), 1);
 
-  drawAntennae(out, width, height, left, right, headTop, eyeDist);
+  drawAntennae(out, rgba, mask, width, height, left, right, headTop, eyeDist);
 
   const faceAngleDeg = (Math.atan2(right[1] - left[1], right[0] - left[0]) * 180) / Math.PI;
   drawAlienEye(out, width, height, left, eyeDist, true, faceAngleDeg, eyeScale);

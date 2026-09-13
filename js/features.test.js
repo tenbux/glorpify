@@ -106,7 +106,13 @@ test('antenna stalk is symmetric around its centerline for a tilted (non-level) 
   // sides of its true (independently computed) centerline, not just one.
   const width = 160, height = 160;
   const rgba = blankBuffer(width, height);
-  rgba.fill(255);
+  // A uniform, non-white "fur" color: the antenna now samples its dark
+  // tone from the pixels under its base, so on a flat white background the
+  // sampled tone (and the drawn body) would be white too, indistinguishable
+  // from untouched background. A non-white fill keeps the two distinguishable.
+  for (let i = 0; i < rgba.length; i += 4) {
+    rgba[i] = 40; rgba[i + 1] = 150; rgba[i + 2] = 40; rgba[i + 3] = 255;
+  }
 
   const eyes = [[60, 100], [100, 80]]; // tilted, not level
   const headTop = [80, 60];
@@ -114,7 +120,7 @@ test('antenna stalk is symmetric around its centerline for a tilted (non-level) 
   const out = drawGlorpFeatures(rgba, width, height, eyes, headTop, 1.0);
 
   function isBackground([r, g, b, a]) {
-    return a !== 255 || (r === 255 && g === 255 && b === 255);
+    return a !== 255 || (r === 40 && g === 150 && b === 40);
   }
 
   // Base/tip of the left-hand (sign=-1) antenna, computed independently of
@@ -135,14 +141,35 @@ test('antenna stalk is symmetric around its centerline for a tilted (non-level) 
   const t = 0.3;
   const cx0 = bx + t * (tx - bx), cy0 = by + t * (ty - by);
   const localHalfW = baseW + t * (2 - baseW); // linear taper: baseHalfW -> tipHalfW(=2)
+  // The body's dark tone is now sampled from the (uniform, in this test)
+  // background, so on a flat fill it exactly matches the background by
+  // design -- only the brighter highlight capsule is guaranteed to differ.
+  // It has a constant half-width along the whole stalk (see drawTaperedStalk).
+  const lineHalfW = Math.max(1, Math.floor(baseW / 2)) / 2;
 
-  const side1 = pixelAt(out, width, Math.round(cx0 + perpX * localHalfW * 0.6), Math.round(cy0 + perpY * localHalfW * 0.6));
-  const side2 = pixelAt(out, width, Math.round(cx0 - perpX * localHalfW * 0.6), Math.round(cy0 - perpY * localHalfW * 0.6));
+  // lineHalfW is sub-pixel-scale for this stalk size, so a single rounded
+  // sample point is fragile to which way it happens to round; scan a small
+  // neighborhood instead and require at least one non-background pixel in
+  // it. A reflection bug (the regression this guards against) would put the
+  // whole highlight on the wrong side, which this still catches.
+  function anyNonBackground(cx, cy, r) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = Math.round(cx) + dx, y = Math.round(cy) + dy;
+        if (x < 0 || x >= width || y < 0) continue;
+        if (!isBackground(pixelAt(out, width, x, y))) return true;
+      }
+    }
+    return false;
+  }
+
+  const side1x = cx0 + perpX * lineHalfW * 0.6, side1y = cy0 + perpY * lineHalfW * 0.6;
+  const side2x = cx0 - perpX * lineHalfW * 0.6, side2y = cy0 - perpY * lineHalfW * 0.6;
   const beyond1 = pixelAt(out, width, Math.round(cx0 + perpX * localHalfW * 2.5), Math.round(cy0 + perpY * localHalfW * 2.5));
   const beyond2 = pixelAt(out, width, Math.round(cx0 - perpX * localHalfW * 2.5), Math.round(cy0 - perpY * localHalfW * 2.5));
 
-  assert.ok(!isBackground(side1), `expected stalk color just inside one true edge, got ${side1}`);
-  assert.ok(!isBackground(side2), `expected stalk color just inside the other true edge, got ${side2}`);
+  assert.ok(anyNonBackground(side1x, side1y, 1), `expected stalk highlight near one true edge (${side1x}, ${side1y})`);
+  assert.ok(anyNonBackground(side2x, side2y, 1), `expected stalk highlight near the other true edge (${side2x}, ${side2y})`);
   assert.ok(isBackground(beyond1), `expected background well outside one true edge, got ${beyond1}`);
   assert.ok(isBackground(beyond2), `expected background well outside the other true edge, got ${beyond2}`);
 });
