@@ -30,5 +30,5 @@ export async function runPipeline({ session, ortModule, rgba, width, height }) {
   const recoloredRgba = glorpGreen(rgba, width, height, mask);
   const { eyes, headTop } = detectFacePoints(width, height, mask, box);
 
-  return { catFound: true, mask, recoloredRgba, eyes, headTop, confidence };
+  return { catFound: true, mask, recoloredRgba, eyes, headTop, box, confidence };
 }

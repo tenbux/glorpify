@@ -54,14 +54,16 @@ let state = {
   rgba: null,       // capped-size original RGBA (Uint8ClampedArray), pre-recolor
   recoloredRgba: null,
   mask: null,       // Uint8Array, capped-size
+  box: null,        // [x1,y1,x2,y2] cat bounding box from segmentCat, capped-size
   width: 0,
   height: 0,
   markers: { eyeL: null, eyeR: null, head: null },
   brushMode: false,
   // Markers are a fixed CSS size, so on a photo where the cat (and its
   // face) is a small fraction of the frame, they dominate and hide it.
-  // Default to auto-zoomed on the cat's mask bounding box; this flag is
-  // the escape hatch back to the full photo.
+  // Default to auto-zoomed on the cat's head region (see
+  // headRegionBoundingBox); this flag is the escape hatch back to the full
+  // photo.
   showFullPhoto: false,
 };
 
@@ -183,6 +185,7 @@ async function processFile(file) {
   state.rgba = rgba;
   state.recoloredRgba = result.recoloredRgba;
   state.mask = result.mask;
+  state.box = result.box;
   state.width = width;
   state.height = height;
   state.markers.eyeL = result.eyes[0];
@@ -216,30 +219,46 @@ function drawRecoloredToCanvas() {
   ctx.putImageData(imageData, 0, 0);
 }
 
-function maskBoundingBox(mask, width, height) {
-  let minX = width, minY = height, maxX = -1, maxY = -1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (mask[y * width + x] > 127) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  return maxX >= minX ? { minX, minY, maxX, maxY } : null;
-}
-
-const ZOOM_PADDING = 0.35; // fraction of the cat's box size added as margin on each side
+// Same head-region heuristic detectFacePoints (js/face.js) uses to pick
+// where to search the mask for a centroid: the top ~45% of the cat's own
+// bounding box, not the default marker positions. Framing on the cat's
+// actual detected location (mask/box, always correct) rather than the
+// markers themselves means the zoom is still right even when the default
+// markers land a bit off -- the user can then drag them into place within
+// a crop that's reliably showing the real head, instead of the zoom having
+// gambled on wherever the markers happened to default to.
+const HEAD_REGION_TOP_MARGIN = 0.05;
+const HEAD_REGION_HEIGHT_FRACTION = 0.45;
+const HEAD_REGION_SIDE_MARGIN = 0.05;
+const ZOOM_EXTRA_PADDING = 0.25; // extra slack around the head region, as a fraction of its own size
 const MAX_ZOOM = 3;
 
+function headRegionBoundingBox() {
+  const [x1, y1, x2, y2] = state.box;
+  const catW = x2 - x1;
+  const catH = y2 - y1;
+
+  const headY1 = y1 - catH * HEAD_REGION_TOP_MARGIN;
+  const headY2 = y1 + catH * HEAD_REGION_HEIGHT_FRACTION;
+  const headX1 = x1 - catW * HEAD_REGION_SIDE_MARGIN;
+  const headX2 = x2 + catW * HEAD_REGION_SIDE_MARGIN;
+
+  const padX = (headX2 - headX1) * ZOOM_EXTRA_PADDING;
+  const padY = (headY2 - headY1) * ZOOM_EXTRA_PADDING;
+
+  return {
+    minX: headX1 - padX,
+    maxX: headX2 + padX,
+    minY: headY1 - padY,
+    maxY: headY2 + padY,
+  };
+}
+
 /**
- * Frame the canvas on the cat's mask bounding box via a CSS transform on
- * the (now absolutely-positioned) canvas element, so markers -- fixed CSS
- * size -- take up proportionally less of a small/far-away cat, on both
- * mouse and touch. Falls back to the untransformed full photo when toggled
- * off or when there's no mask to frame from.
+ * Frame the canvas on the cat's head region via a CSS transform on the (now
+ * absolutely-positioned) canvas element, so markers -- fixed CSS size --
+ * take up proportionally less of a small/far-away cat, on both mouse and
+ * touch. Falls back to the untransformed full photo when toggled off.
  *
  * All marker positioning and pointer-to-image-coordinate math elsewhere
  * (positionMarker, clientToNatural, the drag handlers) reads the canvas's
@@ -248,7 +267,7 @@ const MAX_ZOOM = 3;
  */
 function applyCanvasZoom() {
   const wrapRect = canvasWrap.getBoundingClientRect();
-  const box = state.showFullPhoto ? null : maskBoundingBox(state.mask, state.width, state.height);
+  const box = state.showFullPhoto || !state.box ? null : headRegionBoundingBox();
 
   if (!box || wrapRect.width === 0) {
     canvas.style.transform = 'scale(1)';
@@ -257,14 +276,14 @@ function applyCanvasZoom() {
     return;
   }
 
-  const boxW = box.maxX - box.minX + 1;
-  const boxH = box.maxY - box.minY + 1;
-  const paddedW = Math.min(state.width, boxW * (1 + ZOOM_PADDING * 2));
-  const paddedH = Math.min(state.height, boxH * (1 + ZOOM_PADDING * 2));
+  // faceMarkerBoundingBox() already includes padding, so the box itself is
+  // the padded frame -- just clamp it to the image bounds.
+  const paddedW = Math.min(state.width, box.maxX - box.minX);
+  const paddedH = Math.min(state.height, box.maxY - box.minY);
   const zoom = Math.max(1, Math.min(MAX_ZOOM, state.width / paddedW, state.height / paddedH));
 
-  const cx = (box.minX + box.maxX + 1) / 2;
-  const cy = (box.minY + box.maxY + 1) / 2;
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
   // The wrapper's aspect-ratio is locked to state.width/state.height, so
   // this ratio holds for both axes.
   const scaleCss = wrapRect.width / state.width;
@@ -544,7 +563,7 @@ window.addEventListener('touchend', () => { if (state.brushMode) onBrushEnd(); }
 function reset() {
   if (lastResultUrl) { URL.revokeObjectURL(lastResultUrl); lastResultUrl = null; }
   fileInput.value = '';
-  state = { rgba: null, recoloredRgba: null, mask: null, width: 0, height: 0, markers: { eyeL: null, eyeR: null, head: null }, brushMode: false, showFullPhoto: false };
+  state = { rgba: null, recoloredRgba: null, mask: null, box: null, width: 0, height: 0, markers: { eyeL: null, eyeR: null, head: null }, brushMode: false, showFullPhoto: false };
   brushPanel.hidden = true;
   fixGreenBtn.classList.remove('active');
   canvasWrap.classList.remove('brush-mode');
