@@ -41,6 +41,7 @@ const resultImg = $('result-img');
 const downloadLink = $('download-link');
 const eyeScaleInput = $('eye-scale');
 const fixGreenBtn = $('fix-green-btn');
+const zoomToggleBtn = $('zoom-toggle-btn');
 const brushPanel = $('brush-panel');
 const brushRadiusInput = $('brush-radius');
 const brushDoneBtn = $('brush-done-btn');
@@ -57,6 +58,11 @@ let state = {
   height: 0,
   markers: { eyeL: null, eyeR: null, head: null },
   brushMode: false,
+  // Markers are a fixed CSS size, so on a photo where the cat (and its
+  // face) is a small fraction of the frame, they dominate and hide it.
+  // Default to auto-zoomed on the cat's mask bounding box; this flag is
+  // the escape hatch back to the full photo.
+  showFullPhoto: false,
 };
 
 instructionsBtn.addEventListener('click', () => instructionsDialog.showModal());
@@ -189,13 +195,19 @@ async function processFile(file) {
 function loadEditor() {
   canvas.width = state.width;
   canvas.height = state.height;
+  canvasWrap.style.setProperty('--canvas-aspect', `${state.width} / ${state.height}`);
   drawRecoloredToCanvas();
 
   hintText.textContent =
     'Drag the markers onto the left eye, right eye, and top of head, then click Glorp it!';
 
-  createMarkers();
+  state.showFullPhoto = false;
+  updateZoomToggleLabel();
+  // Section must be visible before rects are meaningful, and the zoom
+  // transform must land before markers are positioned from it.
   showEditor();
+  applyCanvasZoom();
+  createMarkers();
 }
 
 function drawRecoloredToCanvas() {
@@ -203,6 +215,84 @@ function drawRecoloredToCanvas() {
   const imageData = new ImageData(state.recoloredRgba, state.width, state.height);
   ctx.putImageData(imageData, 0, 0);
 }
+
+function maskBoundingBox(mask, width, height) {
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (mask[y * width + x] > 127) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  return maxX >= minX ? { minX, minY, maxX, maxY } : null;
+}
+
+const ZOOM_PADDING = 0.35; // fraction of the cat's box size added as margin on each side
+const MAX_ZOOM = 3;
+
+/**
+ * Frame the canvas on the cat's mask bounding box via a CSS transform on
+ * the (now absolutely-positioned) canvas element, so markers -- fixed CSS
+ * size -- take up proportionally less of a small/far-away cat, on both
+ * mouse and touch. Falls back to the untransformed full photo when toggled
+ * off or when there's no mask to frame from.
+ *
+ * All marker positioning and pointer-to-image-coordinate math elsewhere
+ * (positionMarker, clientToNatural, the drag handlers) reads the canvas's
+ * actual getBoundingClientRect(), which already reflects this transform,
+ * so none of it needs to know zoom/pan happened at all.
+ */
+function applyCanvasZoom() {
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  const box = state.showFullPhoto ? null : maskBoundingBox(state.mask, state.width, state.height);
+
+  if (!box || wrapRect.width === 0) {
+    canvas.style.transform = 'scale(1)';
+    canvas.style.left = '0px';
+    canvas.style.top = '0px';
+    return;
+  }
+
+  const boxW = box.maxX - box.minX + 1;
+  const boxH = box.maxY - box.minY + 1;
+  const paddedW = Math.min(state.width, boxW * (1 + ZOOM_PADDING * 2));
+  const paddedH = Math.min(state.height, boxH * (1 + ZOOM_PADDING * 2));
+  const zoom = Math.max(1, Math.min(MAX_ZOOM, state.width / paddedW, state.height / paddedH));
+
+  const cx = (box.minX + box.maxX + 1) / 2;
+  const cy = (box.minY + box.maxY + 1) / 2;
+  // The wrapper's aspect-ratio is locked to state.width/state.height, so
+  // this ratio holds for both axes.
+  const scaleCss = wrapRect.width / state.width;
+
+  const scaledW = state.width * scaleCss * zoom;
+  const scaledH = state.height * scaleCss * zoom;
+  let left = wrapRect.width / 2 - cx * scaleCss * zoom;
+  let top = wrapRect.height / 2 - cy * scaleCss * zoom;
+  // Clamp so panning to frame the cat never reveals empty space past the
+  // canvas's own edges (e.g. a cat near a corner of the photo).
+  left = Math.min(0, Math.max(wrapRect.width - scaledW, left));
+  top = Math.min(0, Math.max(wrapRect.height - scaledH, top));
+
+  canvas.style.transform = `scale(${zoom})`;
+  canvas.style.left = `${left}px`;
+  canvas.style.top = `${top}px`;
+}
+
+function updateZoomToggleLabel() {
+  zoomToggleBtn.textContent = state.showFullPhoto ? 'Zoom to face' : 'Show full photo';
+}
+
+zoomToggleBtn.addEventListener('click', () => {
+  state.showFullPhoto = !state.showFullPhoto;
+  updateZoomToggleLabel();
+  applyCanvasZoom();
+  repositionAllMarkers();
+});
 
 let markerAbortController = null;
 
@@ -244,7 +334,11 @@ function repositionAllMarkers() {
   });
 }
 
-window.addEventListener('resize', () => { if (!editorSec.hidden) repositionAllMarkers(); });
+window.addEventListener('resize', () => {
+  if (editorSec.hidden) return;
+  applyCanvasZoom();
+  repositionAllMarkers();
+});
 
 function makeDraggable(el, key, signal) {
   let dragging = false;
@@ -450,7 +544,7 @@ window.addEventListener('touchend', () => { if (state.brushMode) onBrushEnd(); }
 function reset() {
   if (lastResultUrl) { URL.revokeObjectURL(lastResultUrl); lastResultUrl = null; }
   fileInput.value = '';
-  state = { rgba: null, recoloredRgba: null, mask: null, width: 0, height: 0, markers: { eyeL: null, eyeR: null, head: null }, brushMode: false };
+  state = { rgba: null, recoloredRgba: null, mask: null, width: 0, height: 0, markers: { eyeL: null, eyeR: null, head: null }, brushMode: false, showFullPhoto: false };
   brushPanel.hidden = true;
   fixGreenBtn.classList.remove('active');
   canvasWrap.classList.remove('brush-mode');

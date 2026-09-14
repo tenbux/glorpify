@@ -135,12 +135,22 @@ header h1 { font-size: 2.4rem; color: #39d353; text-shadow: 0 0 12px #39d35366; 
   border: 1px solid #30363d;
   border-radius: 8px;
   overflow: hidden;
-  max-width: min(800px, 100vw - 2rem);
+  /* The canvas is absolutely positioned (see below) to support the
+     auto-zoom transform, so it no longer contributes to layout -- the
+     wrapper needs an explicit width (not max-width) or it has nothing left
+     to size itself from. aspect-ratio (state.width / state.height, set
+     from JS per photo) then derives the height from that width. */
+  width: min(800px, 100vw - 2rem);
+  aspect-ratio: var(--canvas-aspect, 4 / 3);
 }
 #preview-canvas {
   display: block;
-  max-width: 100%;
-  height: auto;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
 }
 
 /* Draggable markers: 44px invisible hit area, 22px visible dot */
